@@ -1,9 +1,8 @@
 // src/components/DocxToPdfViewer.js
 import React, { useState, useEffect } from 'react';
 import mammoth from 'mammoth';
-import { jsPDF } from 'jspdf';
-import html2canvas from 'html2canvas';
-import PdfViewer from './PdfViewer'; // Use the updated PdfViewer component
+import PdfViewer from './PdfViewer'; // Use your existing PdfViewer component
+import html2pdf from 'html2pdf.js';
 
 const DocxToPdfViewer = ({ fileUrl }) => {
   const [pdfBlobUrl, setPdfBlobUrl] = useState(null);
@@ -13,37 +12,44 @@ const DocxToPdfViewer = ({ fileUrl }) => {
       try {
         // Fetch the DOCX file
         const response = await fetch(fileUrl);
-        if (!response.ok) throw new Error(`Failed to fetch file: ${response.statusText}`);
         const arrayBuffer = await response.arrayBuffer();
 
-        // Convert DOCX to HTML using mammoth
+        // Convert DOCX to HTML using mammoth.js
         const { value: htmlContent } = await mammoth.convertToHtml({ arrayBuffer });
 
-        // Create a hidden div to render the HTML for canvas conversion
+        // Create a div to render HTML content for conversion
         const tempDiv = document.createElement('div');
         tempDiv.innerHTML = htmlContent;
-        tempDiv.style.position = 'absolute';
-        tempDiv.style.left = '-9999px';
+
+        // Add necessary styles
+        tempDiv.style.position = 'relative';
+        tempDiv.style.width = '210mm'; // A4 width
+        tempDiv.style.minHeight = '297mm'; // A4 height
+        tempDiv.style.padding = '20mm'; // Optional padding
+        tempDiv.style.boxSizing = 'border-box';
+        tempDiv.style.backgroundColor = '#fff';
+
+        // Append to body
         document.body.appendChild(tempDiv);
 
-        // Convert the HTML content to a canvas using html2canvas
-        const canvas = await html2canvas(tempDiv);
-        const imgData = canvas.toDataURL('image/png');
+        // Wait for the content to render
+        setTimeout(async () => {
+          const opt = {
+            margin: [10, 10, 10, 10],
+            filename: 'output.pdf',
+            image: { type: 'jpeg', quality: 0.98 },
+            html2canvas: { scale: 2 },
+            jsPDF: { unit: 'mm', format: 'a4', orientation: 'portrait' },
+          };
 
-        // Create a new PDF document using jsPDF
-        const pdfDoc = new jsPDF('p', 'mm', 'a4');
-        const imgWidth = 210; // Width in mm for A4 page
-        const imgHeight = (canvas.height * imgWidth) / canvas.width; // Maintain aspect ratio
+          const pdfBlob = await html2pdf().from(tempDiv).set(opt).outputPdf('blob');
+          const pdfBlobUrl = URL.createObjectURL(pdfBlob);
+          setPdfBlobUrl(pdfBlobUrl);
 
-        pdfDoc.addImage(imgData, 'PNG', 0, 0, imgWidth, imgHeight);
+          // Clean up
+          document.body.removeChild(tempDiv);
+        }, 1000); // Adjust the delay as needed
 
-        // Convert the PDF document to a Blob and create a URL
-        const pdfBlob = pdfDoc.output('blob');
-        const pdfBlobUrl = URL.createObjectURL(pdfBlob);
-        setPdfBlobUrl(pdfBlobUrl);
-
-        // Clean up temporary div
-        document.body.removeChild(tempDiv);
       } catch (error) {
         console.error('Error converting DOCX to PDF:', error);
       }
@@ -57,7 +63,7 @@ const DocxToPdfViewer = ({ fileUrl }) => {
   return (
     <div>
       {pdfBlobUrl ? (
-        <PdfViewer fileUrl={pdfBlobUrl} /> // Use the PdfViewer component to render the converted PDF
+        <PdfViewer fileUrl={pdfBlobUrl} /> // Reuse your PdfViewer component
       ) : (
         <p>Loading...</p>
       )}
